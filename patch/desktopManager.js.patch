@@ -1,0 +1,100 @@
+--- a/desktopManager.js
++++ b/desktopManager.js
+@@ -479,13 +479,27 @@
+         case 1:
+         case 2:
+             if (fileList.length != 0) {
+-                this.clearFileCoordinates(fileList, [xDestination, yDestination]);
+-                let data = Gio.File.new_for_uri(fileList[0]).query_info('id::filesystem', Gio.FileQueryInfoFlags.NONE, null);
+-                let id_fs = data.get_attribute_string('id::filesystem');
+-                if ((this.desktopFsId == id_fs) && (!forceCopy)) {
+-                    DBusUtils.RemoteFileOperations.MoveURIsRemote(fileList, "file://" + GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP));
+-                } else {
+-                    DBusUtils.RemoteFileOperations.CopyURIsRemote(fileList, "file://" + GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP));
++                let remoteFiles = [];
++                let localFiles = [];
++                for (let uri of fileList) {
++                    if (uri.startsWith('file://')) {
++                        localFiles.push(uri);
++                    } else {
++                        remoteFiles.push(uri);
++                    }
++                }
++                if (remoteFiles.length != 0) {
++                    this.downloadURIsToDesktop(remoteFiles, [xDestination, yDestination]);
++                }
++                if (localFiles.length != 0) {
++                    this.clearFileCoordinates(localFiles, [xDestination, yDestination]);
++                    let data = Gio.File.new_for_uri(localFiles[0]).query_info('id::filesystem', Gio.FileQueryInfoFlags.NONE, null);
++                    let id_fs = data.get_attribute_string('id::filesystem');
++                    if ((this.desktopFsId == id_fs) && (!forceCopy)) {
++                        DBusUtils.RemoteFileOperations.MoveURIsRemote(localFiles, "file://" + GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP));
++                    } else {
++                        DBusUtils.RemoteFileOperations.CopyURIsRemote(localFiles, "file://" + GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP));
++                    }
+                 }
+             }
+             break;
+@@ -498,6 +512,62 @@
+         }
+     }
+ 
++    downloadURIsToDesktop(uris, dropCoordinates) {
++        let desktopPath = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP);
++        for (let uri of uris) {
++            try {
++                let source = Gio.File.new_for_uri(uri);
++                let name = source.get_basename() || 'image';
++                let query = name.indexOf('?');
++                if (query >= 0) {
++                    name = name.substring(0, query);
++                }
++                let fragment = name.indexOf('#');
++                if (fragment >= 0) {
++                    name = name.substring(0, fragment);
++                }
++                try {
++                    name = GLib.uri_unescape_string(name, null) || name;
++                } catch (e) {
++                }
++                // Never allow a dropped URI to escape the Desktop directory.
++                name = name.replace(/[\/\\]/g, '_');
++                while (name.startsWith('.')) {
++                    name = '_' + name.substring(1);
++                }
++                if (name == '') {
++                    name = 'image';
++                }
++                let dot = name.lastIndexOf('.');
++                let base = (dot > 0) ? name.substring(0, dot) : name;
++                let extension = (dot > 0) ? name.substring(dot) : '';
++                let dest = Gio.File.new_for_path(GLib.build_filenamev([desktopPath, name]));
++                let counter = 1;
++                while (dest.query_exists(null)) {
++                    dest = Gio.File.new_for_path(GLib.build_filenamev([desktopPath, base + ' (' + counter + ')' + extension]));
++                    counter++;
++                }
++                let finalDest = dest;
++                let coords = dropCoordinates;
++                source.copy_async(finalDest, Gio.FileCopyFlags.NONE, GLib.PRIORITY_DEFAULT, null, null, (src, res) => {
++                    try {
++                        src.copy_finish(res);
++                        let info = new Gio.FileInfo();
++                        info.set_attribute_string('metadata::nautilus-drop-position', coords[0] + ',' + coords[1]);
++                        try {
++                            finalDest.set_attributes_from_info(info, Gio.FileQueryInfoFlags.NONE, null);
++                        } catch (e) {
++                        }
++                    } catch (e) {
++                        logError(e, 'DING: unable to save dropped file ' + uri);
++                    }
++                });
++            } catch (e) {
++                logError(e, 'DING: invalid dropped URI ' + uri);
++            }
++        }
++    }
++
+     detectURLorText(fileList, dropCoordinates) {
+         function isValidURL(str) {
+             var pattern = new RegExp('^(https|http|ftp|rtsp|mms)?:\\/\\/?'+ 

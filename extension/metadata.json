@@ -1,0 +1,12 @@
+{
+    "description": "Desktop Icons NG with drag-and-drop saving of remote images.",
+    "name": "Desktop Icons NG (image drag)",
+    "shell-version": [
+        "3.38",
+        "40",
+        "41",
+        "42"
+    ],
+    "uuid": "ding-images@local",
+    "url": "https://gitlab.com/rastersoft/desktop-icons-ng"
+}
