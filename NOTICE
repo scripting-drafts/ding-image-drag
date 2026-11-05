@@ -1,0 +1,14 @@
+Desktop Icons NG (DING)
+Copyright (C) 2019-2022 Sergio Costas <rastersoft@gmail.com>
+Based on code original (C) Carlos Soriano
+Debian packaging Copyright (C) 2021-2022 Canonical Ltd
+
+Upstream: https://gitlab.com/rastersoft/desktop-icons-ng
+Source basis: Ubuntu 22.04 package gnome-shell-extension-desktop-icons-ng,
+desktopManager.js dated 2022-06-28.
+
+This is an unofficial modified copy. The modification is in
+desktopManager.js: remote http(s) images dropped on the desktop are
+downloaded instead of delegated to Nautilus. See patch/.
+
+License: GPL-3.0-only. See LICENSE.
