@@ -468,13 +468,16 @@ var DesktopManager = class {
         if (info == 4) {
             // Firefox stores this flavor as UTF-16LE.
             let bytes = selection.get_data();
+            if (!bytes || bytes.length == 0) {
+                return;
+            }
             let uri = '';
             try {
                 uri = new TextDecoder('utf-16le').decode(bytes);
             } catch (e) {
                 uri = String.fromCharCode.apply(null, Array.from(bytes).filter(byte => byte !== 0));
             }
-            uri = uri.replace(/^\uFEFF/, '').replace(/\0+$/g, '').trim();
+            uri = uri.replace(/^\uFEFF/, '').replace(/\0/g, '').replace(/[\r\n]/g, '').trim();
             if (!/^(https?|file|data|blob):/i.test(uri)) {
                 try {
                     uri = new TextDecoder('utf-8').decode(bytes).trim();
@@ -537,6 +540,10 @@ var DesktopManager = class {
         let desktopPath = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP);
         for (let uri of uris) {
             try {
+                let scheme = uri.split(':', 1)[0].toLowerCase();
+                if (!['http', 'https', 'file', 'data', 'blob'].includes(scheme)) {
+                    continue;
+                }
                 let source = Gio.File.new_for_uri(uri);
                 let name = source.get_basename() || 'image';
                 let query = name.indexOf('?');
@@ -551,6 +558,7 @@ var DesktopManager = class {
                     name = GLib.uri_unescape_string(name, null) || name;
                 } catch (e) {
                 }
+                name = name.replace(/[\x00-\x1F\x7F]/g, '');
                 // Never allow a dropped URI to escape the Desktop directory.
                 name = name.replace(/[\/\\]/g, '_');
                 while (name.startsWith('.')) {
@@ -558,6 +566,23 @@ var DesktopManager = class {
                 }
                 if (name == '') {
                     name = 'image';
+                }
+                // Keep the filename within filesystem limits while preserving the extension.
+                try {
+                    let encoder = new TextEncoder();
+                    if (encoder.encode(name).length > 200) {
+                        let lastDot = name.lastIndexOf('.');
+                        let suffix = (lastDot > 0 && name.length - lastDot <= 12) ? name.substring(lastDot) : '';
+                        let baseName = (lastDot > 0) ? name.substring(0, lastDot) : name;
+                        while (baseName.length > 0 && encoder.encode(baseName + suffix).length > 200) {
+                            baseName = baseName.substring(0, baseName.length - 1);
+                        }
+                        name = baseName + suffix;
+                    }
+                } catch (e) {
+                    if (name.length > 120) {
+                        name = name.substring(0, 120);
+                    }
                 }
                 let dot = name.lastIndexOf('.');
                 let base = (dot > 0) ? name.substring(0, dot) : name;
