@@ -7,8 +7,9 @@ Upstream: https://gitlab.com/rastersoft/desktop-icons-ng
 Source basis: Ubuntu 22.04 package gnome-shell-extension-desktop-icons-ng,
 desktopManager.js dated 2022-06-28.
 
-This is an unofficial modified copy. The modification is in
-desktopManager.js: remote http(s) images dropped on the desktop are
-downloaded instead of delegated to Nautilus. See patch/.
+This is an unofficial modified copy. The modifications are in
+desktopManager.js and desktopGrid.js: images dropped on the desktop are
+downloaded from Firefox's image URL instead of delegated to Nautilus.
+See patch/.
 
 License: GPL-3.0-only. See LICENSE.

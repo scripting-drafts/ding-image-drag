@@ -465,6 +465,27 @@ var DesktopManager = class {
 
     onDragDataReceived(xDestination, yDestination, selection, info, forceLocal, forceCopy) {
         this.onDragLeave();
+        if (info == 4) {
+            // Firefox stores this flavor as UTF-16LE.
+            let bytes = selection.get_data();
+            let uri = '';
+            try {
+                uri = new TextDecoder('utf-16le').decode(bytes);
+            } catch (e) {
+                uri = String.fromCharCode.apply(null, Array.from(bytes).filter(byte => byte !== 0));
+            }
+            uri = uri.replace(/^\uFEFF/, '').replace(/\0+$/g, '').trim();
+            if (!/^(https?|file|data|blob):/i.test(uri)) {
+                try {
+                    uri = new TextDecoder('utf-8').decode(bytes).trim();
+                } catch (e) {
+                }
+            }
+            if (uri.length != 0) {
+                this.downloadURIsToDesktop([uri], [xDestination, yDestination]);
+            }
+            return;
+        }
         let fileList = DesktopIconsUtil.getFilesFromNautilusDnD(selection, info);
         if (forceLocal) {
             info = 0;

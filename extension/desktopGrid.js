@@ -239,6 +239,8 @@ var DesktopGrid = class {
     setDropDestination(dropDestination) {
         dropDestination.drag_dest_set(Gtk.DestDefaults.MOTION | Gtk.DestDefaults.DROP, null, Gdk.DragAction.MOVE|Gdk.DragAction.COPY|Gdk.DragAction.DEFAULT);
         let targets = new Gtk.TargetList(null);
+        // Firefox exposes the actual image URL here even when the image is a link.
+        targets.add(Gdk.atom_intern('application/x-moz-file-promise-url', false), 0, 4);
         targets.add(Gdk.atom_intern('x-special/ding-icon-list', false), Gtk.TargetFlags.SAME_APP, 0);
         targets.add(Gdk.atom_intern('x-special/gnome-icon-list', false), 0, 1);
         targets.add(Gdk.atom_intern('text/uri-list', false), 0, 2);
