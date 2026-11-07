@@ -10,6 +10,6 @@ desktopManager.js dated 2022-06-28.
 This is an unofficial modified copy. The modifications are in
 desktopManager.js and desktopGrid.js: images dropped on the desktop are
 downloaded from Firefox's image URL instead of delegated to Nautilus.
-See patch/.
+See patch/. Verified against Firefox ESR 153.6 on GNOME Shell 42.9.
 
 License: GPL-3.0-only. See LICENSE.
