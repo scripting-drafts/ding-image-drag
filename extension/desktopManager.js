@@ -463,28 +463,33 @@ var DesktopManager = class {
         this.dragItem = null;
     }
 
+    getURIFromFirefoxFlavor(selection) {
+        // Firefox stores this flavor as UTF-16LE.
+        let bytes = selection.get_data();
+        if (!bytes || bytes.length == 0) {
+            return null;
+        }
+        let uri = '';
+        try {
+            uri = new TextDecoder('utf-16le').decode(bytes);
+        } catch (e) {
+            uri = String.fromCharCode.apply(null, Array.from(bytes).filter(byte => byte !== 0));
+        }
+        uri = uri.replace(/^\uFEFF/, '').replace(/\0/g, '').replace(/[\r\n]/g, '').trim();
+        if (!/^(https?|file|data|blob):/i.test(uri)) {
+            try {
+                uri = new TextDecoder('utf-8').decode(bytes).trim();
+            } catch (e) {
+            }
+        }
+        return uri.length != 0 ? uri : null;
+    }
+
     onDragDataReceived(xDestination, yDestination, selection, info, forceLocal, forceCopy) {
         this.onDragLeave();
         if (info == 4) {
-            // Firefox stores this flavor as UTF-16LE.
-            let bytes = selection.get_data();
-            if (!bytes || bytes.length == 0) {
-                return;
-            }
-            let uri = '';
-            try {
-                uri = new TextDecoder('utf-16le').decode(bytes);
-            } catch (e) {
-                uri = String.fromCharCode.apply(null, Array.from(bytes).filter(byte => byte !== 0));
-            }
-            uri = uri.replace(/^\uFEFF/, '').replace(/\0/g, '').replace(/[\r\n]/g, '').trim();
-            if (!/^(https?|file|data|blob):/i.test(uri)) {
-                try {
-                    uri = new TextDecoder('utf-8').decode(bytes).trim();
-                } catch (e) {
-                }
-            }
-            if (uri.length != 0) {
+            let uri = this.getURIFromFirefoxFlavor(selection);
+            if (uri != null) {
                 this.downloadURIsToDesktop([uri], [xDestination, yDestination]);
             }
             return;
@@ -536,8 +541,13 @@ var DesktopManager = class {
         }
     }
 
-    downloadURIsToDesktop(uris, dropCoordinates) {
-        let desktopPath = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP);
+    downloadURIsToDesktop(uris, dropCoordinates, destinationDirectory = null) {
+        let destinationPath = destinationDirectory ? destinationDirectory.get_path() :
+            GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP);
+        if (!destinationPath) {
+            logError(new Error('DING: no destination directory for dropped files'));
+            return;
+        }
         for (let uri of uris) {
             try {
                 let scheme = uri.split(':', 1)[0].toLowerCase();
@@ -559,7 +569,7 @@ var DesktopManager = class {
                 } catch (e) {
                 }
                 name = name.replace(/[\x00-\x1F\x7F]/g, '');
-                // Never allow a dropped URI to escape the Desktop directory.
+                // Never allow a dropped URI to escape the destination directory.
                 name = name.replace(/[\/\\]/g, '_');
                 while (name.startsWith('.')) {
                     name = '_' + name.substring(1);
@@ -587,10 +597,10 @@ var DesktopManager = class {
                 let dot = name.lastIndexOf('.');
                 let base = (dot > 0) ? name.substring(0, dot) : name;
                 let extension = (dot > 0) ? name.substring(dot) : '';
-                let dest = Gio.File.new_for_path(GLib.build_filenamev([desktopPath, name]));
+                let dest = Gio.File.new_for_path(GLib.build_filenamev([destinationPath, name]));
                 let counter = 1;
                 while (dest.query_exists(null)) {
-                    dest = Gio.File.new_for_path(GLib.build_filenamev([desktopPath, base + ' (' + counter + ')' + extension]));
+                    dest = Gio.File.new_for_path(GLib.build_filenamev([destinationPath, base + ' (' + counter + ')' + extension]));
                     counter++;
                 }
                 let finalDest = dest;
@@ -598,11 +608,13 @@ var DesktopManager = class {
                 source.copy_async(finalDest, Gio.FileCopyFlags.NONE, GLib.PRIORITY_DEFAULT, null, null, (src, res) => {
                     try {
                         src.copy_finish(res);
-                        let info = new Gio.FileInfo();
-                        info.set_attribute_string('metadata::nautilus-drop-position', coords[0] + ',' + coords[1]);
-                        try {
-                            finalDest.set_attributes_from_info(info, Gio.FileQueryInfoFlags.NONE, null);
-                        } catch (e) {
+                        if (coords) {
+                            let info = new Gio.FileInfo();
+                            info.set_attribute_string('metadata::nautilus-drop-position', coords[0] + ',' + coords[1]);
+                            try {
+                                finalDest.set_attributes_from_info(info, Gio.FileQueryInfoFlags.NONE, null);
+                            } catch (e) {
+                            }
                         }
                     } catch (e) {
                         logError(e, 'DING: unable to save dropped file ' + uri);

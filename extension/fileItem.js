@@ -391,47 +391,93 @@ var FileItem = class extends desktopIconItem.desktopIconItem {
      ***********************/
 
     _setDropDestination(dropDestination) {
-        dropDestination.drag_dest_set(Gtk.DestDefaults.MOTION | Gtk.DestDefaults.DROP, null, Gdk.DragAction.MOVE);
+        dropDestination.drag_dest_set(Gtk.DestDefaults.MOTION | Gtk.DestDefaults.DROP, null,
+                                      Gdk.DragAction.MOVE | Gdk.DragAction.COPY | Gdk.DragAction.DEFAULT);
         if ((this._fileExtra == Enums.FileType.USER_DIRECTORY_TRASH) ||
             (this._fileExtra == Enums.FileType.USER_DIRECTORY_HOME) ||
             (this._fileExtra != Enums.FileType.EXTERNAL_DRIVE) ||
             (this._isDirectory)) {
                 let targets = new Gtk.TargetList(null);
+                if (this._isDirectory) {
+                    // Firefox exposes the full-resolution image URL here.
+                    targets.add(Gdk.atom_intern('application/x-moz-file-promise-url', false), 0, 4);
+                }
                 targets.add(Gdk.atom_intern('x-special/gnome-icon-list', false), 0, 1);
                 targets.add(Gdk.atom_intern('text/uri-list', false), 0, 2);
                 dropDestination.drag_dest_set_target_list(targets);
                 dropDestination.connect('drag-data-received', (widget, context, x, y, selection, info, time) => {
-                    let forceCopy = DesktopIconsUtil.getModifiersInDnD(context, Gdk.ModifierType.CONTROL_MASK);
-                    if ((info == 1) || (info == 2)) {
-                        let fileList = DesktopIconsUtil.getFilesFromNautilusDnD(selection, info);
-                        if (fileList.length != 0) {
-                            if (this._hasToRouteDragToGrid()) {
-                                this._grid.receiveDrop(this._x1 + x, this._y1 + y, selection, info, true, forceCopy);
-                                return;
-                            }
-                            if (this._desktopManager.dragItem && ((this._desktopManager.dragItem.uri == this._file.get_uri()) || !(this._isValidDesktopFile || this.isDirectory))) {
-                                // Dragging a file/folder over itself or over another file will do nothing, allow drag to directory or validdesktop file
-                                return;
-                            }
-                            if ( this._isValidDesktopFile ) {
-                                // open the desktopfile with these dropped files as the arguments
-                                this.doOpen(fileList);
-                                return;
-                            }
-                            if (this._fileExtra != Enums.FileType.USER_DIRECTORY_TRASH) {
-                                let data = Gio.File.new_for_uri(fileList[0]).query_info('id::filesystem', Gio.FileQueryInfoFlags.NONE, null);
-                                let id_fs = data.get_attribute_string('id::filesystem');
-                                if ((this._desktopManager.desktopFsId == id_fs) && (!forceCopy)) {
-                                    DBusUtils.RemoteFileOperations.MoveURIsRemote(fileList, this._file.get_uri());
-                                } else {
-                                    DBusUtils.RemoteFileOperations.CopyURIsRemote(fileList, this._file.get_uri());
-                                }
-                            } else {
-                                DBusUtils.RemoteFileOperations.TrashURIsRemote(fileList);
-                            }
-                        }
-                    }
+                    this._onDragDataReceived(context, x, y, selection, info);
                 });
+        }
+    }
+
+    _onDragDataReceived(context, x, y, selection, info) {
+        let forceCopy = DesktopIconsUtil.getModifiersInDnD(context, Gdk.ModifierType.CONTROL_MASK);
+        let dropCoordinates = [this._x1 + x, this._y1 + y];
+        if (info == 4) {
+            if (!this._isDirectory) {
+                return;
+            }
+            let uri = this._desktopManager.getURIFromFirefoxFlavor(selection);
+            if (uri != null) {
+                this._desktopManager.downloadURIsToDesktop([uri], dropCoordinates, this._file);
+            }
+            return;
+        }
+        if ((info == 1) || (info == 2)) {
+            let fileList = DesktopIconsUtil.getFilesFromNautilusDnD(selection, info);
+            if (fileList.length != 0) {
+                if (this._hasToRouteDragToGrid()) {
+                    this._grid.receiveDrop(this._x1 + x, this._y1 + y, selection, info, true, forceCopy);
+                    return;
+                }
+                if (this._desktopManager.dragItem && ((this._desktopManager.dragItem.uri == this._file.get_uri()) || !(this._isValidDesktopFile || this.isDirectory))) {
+                    // Dragging a file/folder over itself or over another file will do nothing, allow drag to directory or validdesktop file
+                    return;
+                }
+                if ( this._isValidDesktopFile ) {
+                    // open the desktopfile with these dropped files as the arguments
+                    this.doOpen(fileList);
+                    return;
+                }
+                if (this._fileExtra == Enums.FileType.USER_DIRECTORY_TRASH) {
+                    DBusUtils.RemoteFileOperations.TrashURIsRemote(fileList);
+                    return;
+                }
+                if (!this._isDirectory) {
+                    return;
+                }
+                let remoteFiles = [];
+                let localFiles = [];
+                for (let uri of fileList) {
+                    if (uri.startsWith('file://')) {
+                        localFiles.push(uri);
+                    } else {
+                        remoteFiles.push(uri);
+                    }
+                }
+                if (remoteFiles.length != 0) {
+                    // Download full-resolution sources rather than
+                    // handing remote URIs to Nautilus.
+                    this._desktopManager.downloadURIsToDesktop(remoteFiles, dropCoordinates, this._file);
+                }
+                if (localFiles.length != 0) {
+                    let id_fs = null;
+                    let destFsId = null;
+                    try {
+                        let data = Gio.File.new_for_uri(localFiles[0]).query_info('id::filesystem', Gio.FileQueryInfoFlags.NONE, null);
+                        id_fs = data.get_attribute_string('id::filesystem');
+                        let destData = this._file.query_info('id::filesystem', Gio.FileQueryInfoFlags.NONE, null);
+                        destFsId = destData.get_attribute_string('id::filesystem');
+                    } catch (e) {
+                    }
+                    if ((destFsId != null) && (destFsId == id_fs) && (!forceCopy)) {
+                        DBusUtils.RemoteFileOperations.MoveURIsRemote(localFiles, this._file.get_uri());
+                    } else {
+                        DBusUtils.RemoteFileOperations.CopyURIsRemote(localFiles, this._file.get_uri());
+                    }
+                }
+            }
         }
     }
 
