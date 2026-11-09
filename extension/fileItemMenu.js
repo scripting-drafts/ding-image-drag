@@ -139,7 +139,9 @@ var FileItemMenu = class {
             let submenu = this._scriptsMonitor.createMenu();
             if (submenu !== null) {
                 addElementToMenu(_("Scripts")).set_submenu(submenu);
-                addSeparator();
+                if (!fileItem.isDirectory) {
+                    addSeparator();
+                }
             }
 
             if (!fileItem.isDirectory) {
@@ -174,6 +176,11 @@ var FileItemMenu = class {
             addElementToMenu(
                 _('Copy'),
                 () => {this._desktopManager.doCopy();}
+            ).set_sensitive(!allowCutCopyTrash);
+
+            addElementToMenu(
+                selectedItemsNum > 1 ? _('Copy Paths') : _('Copy Path'),
+                () => {this._doCopyPath();}
             ).set_sensitive(!allowCutCopyTrash);
 
             if (fileItem.canRename && (selectedItemsNum == 1)) {
@@ -313,6 +320,25 @@ var FileItemMenu = class {
         }
         const timestamp = Gtk.get_current_event_time();
         DBusUtils.RemoteFileOperations.ShowItemsRemote(showInFilesList, timestamp);
+    }
+
+    _doCopyPath() {
+        const paths = [];
+        for (const item of (this._desktopManager.getCurrentSelection(false) || [])) {
+            if (item.isSpecial) {
+                continue;
+            }
+            const path = item.path;
+            if (path) {
+                paths.push(path);
+            }
+        }
+        if (!paths.length) {
+            return;
+        }
+        const clipboard = Gtk.Clipboard.get(Gdk.Atom.intern('CLIPBOARD', false));
+        clipboard.set_text(paths.join('\n'), -1);
+        clipboard.store();
     }
 
     _doMultiOpen() {
