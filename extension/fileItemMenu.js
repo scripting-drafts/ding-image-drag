@@ -120,15 +120,6 @@ var FileItemMenu = class {
             );
         }
 
-        const imageCanvasCommand = this._getImageCanvasCommand();
-        if (! fileItem.isStackMarker && ! fileItem.isDirectory &&
-            imageCanvasCommand && this._selectionIsImages()) {
-            addElementToMenu(
-                selectedItemsNum > 1 ? _("Open All With Image Canvas") : _("Open With Image Canvas"),
-                () => {this._doOpenWithImageCanvas(imageCanvasCommand);}
-            );
-        }
-
         let keepStacked = Prefs.desktopSettings.get_boolean('keep-stacked');
         if (keepStacked && ! fileItem.stackUnique) {
             if (! fileItem.isSpecial && ! fileItem.isDirectory && ! fileItem.isValidDesktopFile) {
@@ -348,44 +339,6 @@ var FileItemMenu = class {
         const clipboard = Gtk.Clipboard.get(Gdk.Atom.intern('CLIPBOARD', false));
         clipboard.set_text(paths.join('\n'), -1);
         clipboard.store();
-    }
-
-    _getImageCanvasCommand() {
-        const local = GLib.build_filenamev([GLib.get_home_dir(), 'bin', 'image-canvas']);
-        if (GLib.file_test(local, GLib.FileTest.IS_EXECUTABLE)) {
-            return local;
-        }
-        return GLib.find_program_in_path('image-canvas');
-    }
-
-    _selectionIsImages() {
-        const selection = this._desktopManager.getCurrentSelection(false);
-        if (!selection || selection.length === 0) {
-            return false;
-        }
-        return selection.every(item =>
-            !item.isSpecial && !item.isDirectory &&
-            (item.attributeContentType || '').startsWith('image/'));
-    }
-
-    _doOpenWithImageCanvas(command) {
-        const selection = this._desktopManager.getCurrentSelection(false) || [];
-        const environ = DesktopIconsUtil.getFilteredEnviron();
-        for (const item of selection) {
-            if (item.isSpecial || item.isDirectory ||
-                !(item.attributeContentType || '').startsWith('image/')) {
-                continue;
-            }
-            const path = item.path;
-            if (!path) {
-                continue;
-            }
-            try {
-                DesktopIconsUtil.trySpawn(null, [command, path], environ);
-            } catch (error) {
-                log(`Error opening ${path} with Image Canvas: ${error.message}`);
-            }
-        }
     }
 
     _doMultiOpen() {
